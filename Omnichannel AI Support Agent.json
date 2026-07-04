@@ -1,0 +1,430 @@
+{
+  "name": "Omnichannel AI Support Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "omnichannel-webhook",
+        "options": {}
+      },
+      "id": "db580b70-3109-46c8-acf6-3d9263ac3883",
+      "name": "Webhook (Entry)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        -48
+      ],
+      "webhookId": "9931e201-2189-4657-9d42-86343a6ae1e6"
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.headers['user-agent'] || $json.body.source }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "whatsapp"
+            },
+            {
+              "value2": "messenger",
+              "output": 1
+            },
+            {
+              "value2": "instagram",
+              "output": 2
+            }
+          ]
+        },
+        "fallbackOutput": 0
+      },
+      "id": "70559028-9ff6-42de-98ef-5cedb9501582",
+      "name": "Detect Source",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        -976,
+        -80
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "userId",
+              "value": "={{ $json.body.from || $json.body.sender.id }}"
+            },
+            {
+              "name": "messageText",
+              "value": "={{ $json.body.text.body || $json.body.message.text }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $input.item.index === 0 ? 'WhatsApp' : 'Meta' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c369968a-e9f3-4f41-b8cc-ac564a31b4b5",
+      "name": "Normalize Data",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        -704,
+        -64
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.messageText }}",
+        "options": {
+          "systemMessage": "You are a professional omnichannel AI customer support agent. Answer questions using the provided business knowledge. If the customer wants to buy, guide them. If they are angry or ask for a human, set the 'escalate' flag."
+        }
+      },
+      "id": "9bb546d7-81fe-4480-a1c3-b42958a73d58",
+      "name": "AI Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        -432,
+        -64
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d6514fe2-f6d7-43e5-9d2f-1eafd83388ad",
+      "name": "Window Buffer Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.2,
+      "position": [
+        -288,
+        272
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.escalate }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "6185da67-cdf1-42b4-8d1c-aba6752fe913",
+      "name": "Check Escalation",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -80,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.yourgateway.com/send",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "to",
+              "value": "={{ $('Normalize Data').item.json.userId }}"
+            },
+            {
+              "name": "message",
+              "value": "={{ $json.output }}"
+            },
+            {
+              "name": "platform",
+              "value": "={{ $('Normalize Data').item.json.platform }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "fc75badf-0042-4ab3-a675-cdba39723c61",
+      "name": "Send Reply API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        432,
+        -144
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=🚨 Human Handoff Needed!\nUser: {{ $('Normalize Data').item.json.userId }}\nPlatform: {{ $('Normalize Data').item.json.platform }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "704841f5-f82e-478d-a17a-913de8acfeab",
+      "name": "Notify Team (Slack)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        224,
+        -176
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "9f53e170-c160-4605-a22a-8822d57b2695",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1248,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "=⚠️ Workflow Error!\nNode: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.error.message }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5116cef0-e59c-4724-b660-684c2375b308",
+      "name": "Log Error",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        -992,
+        224
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -432,
+        272
+      ],
+      "id": "94839515-962c-40b4-91f4-996d19a7b619",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "UkmOGLUU2o6bQgT1",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        160,
+        64
+      ],
+      "id": "c60b828c-d46a-4e2b-8443-1e311ef28ba1",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        400,
+        80
+      ],
+      "id": "4347c041-2dbf-4425-ad75-32ccf68e0f56",
+      "name": "Append row in sheet"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook (Entry)": {
+      "main": [
+        [
+          {
+            "node": "Detect Source",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Detect Source": {
+      "main": [
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Data": {
+      "main": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Support Agent": {
+      "main": [
+        [
+          {
+            "node": "Check Escalation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Window Buffer Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Escalation": {
+      "main": [
+        [
+          {
+            "node": "Notify Team (Slack)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Reply API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Log Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "AI Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Team (Slack)": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "a930f2f5-4098-42d7-8965-5dd9eedaabf7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "8ae574e48c2be6f29c3d6448afb18ceecb51489e97d5cd20a40b37912ab027e4"
+  },
+  "nodeGroups": [],
+  "id": "nzDRNzqTsob7SqpA",
+  "tags": []
+}
