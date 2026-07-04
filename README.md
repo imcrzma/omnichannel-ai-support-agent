@@ -1,5 +1,6 @@
 # Omnichannel AI Support Agent
 
+![Workflow Preview](workflow-preview.png)
 
 An AI-powered customer support workflow built with n8n.
 
